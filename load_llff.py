@@ -2,10 +2,14 @@ import numpy as np
 import os, imageio
 
 
+# 原始注释和备注，本部分代码基本上都是从SIGGRAPH原文参考实现拿过来微调的
 ########## Slightly modified version of LLFF data loading code 
 ##########  see https://github.com/Fyusion/LLFF for original
 
 def _minify(basedir, factors=[], resolutions=[]):
+    """
+    按输入参数降低输入图像的分辨率
+    """
     needtoload = False
     for r in factors:
         imgdir = os.path.join(basedir, 'images_{}'.format(r))
@@ -60,17 +64,18 @@ def _minify(basedir, factors=[], resolutions=[]):
         
         
 def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
-    
     poses_arr = np.load(os.path.join(basedir, 'poses_bounds.npy'))
     poses = poses_arr[:, :-2].reshape([-1, 3, 5]).transpose([1,2,0])
     bds = poses_arr[:, -2:].transpose([1,0])
     
+    # 加载图像
     img0 = [os.path.join(basedir, 'images', f) for f in sorted(os.listdir(os.path.join(basedir, 'images'))) \
             if f.endswith('JPG') or f.endswith('jpg') or f.endswith('png')][0]
     sh = imageio.imread(img0).shape
     
     sfx = ''
     
+    # 图像分辨率预处理
     if factor is not None:
         sfx = '_{}'.format(factor)
         _minify(basedir, factors=[factor])
@@ -99,6 +104,7 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
         return
     
     sh = imageio.imread(imgfiles[0]).shape
+    # 相机外参
     poses[:2, 4, :] = np.array(sh[:2]).reshape([2, 1])
     poses[2, 4, :] = poses[2, 4, :] * 1./factor
     
@@ -111,6 +117,7 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
         else:
             return imageio.imread(f)
         
+    # 所有图像unsigned int to float
     imgs = imgs = [imread(f)[...,:3]/255. for f in imgfiles]
     imgs = np.stack(imgs, -1)  
     
@@ -126,6 +133,9 @@ def normalize(x):
     return x / np.linalg.norm(x)
 
 def viewmatrix(z, up, pos):
+    """
+    计算c2w矩阵
+    """
     vec2 = normalize(z)
     vec1_avg = up
     vec0 = normalize(np.cross(vec1_avg, vec2))
@@ -138,7 +148,7 @@ def ptstocam(pts, c2w):
     return tt
 
 def poses_avg(poses):
-
+    # 多个相机位姿求平均
     hwf = poses[0, :3, -1:]
 
     center = poses[:, :3, 3].mean(0)
@@ -151,6 +161,7 @@ def poses_avg(poses):
 
 
 def render_path_spiral(c2w, up, rads, focal, zdelta, zrate, rots, N):
+    # 生成spiral渲染位姿 
     render_poses = []
     rads = np.array(list(rads) + [1.])
     hwf = c2w[:,4:5]
@@ -164,6 +175,7 @@ def render_path_spiral(c2w, up, rads, focal, zdelta, zrate, rots, N):
 
 
 def recenter_poses(poses):
+    # 将输入的相机位姿poses，转换到以平均位姿为参考的坐标系下
 
     poses_ = poses+0
     bottom = np.reshape([0,0,0,1.], [1,4])
@@ -182,6 +194,7 @@ def recenter_poses(poses):
 
 
 def spherify_poses(poses, bds):
+    # 以输入位姿和边界，生成围绕着中心的360度场景位姿和边界，用于渲染最终效果
     
     p34_to_44 = lambda p : np.concatenate([p, np.tile(np.reshape(np.eye(4)[-1,:], [1,1,4]), [p.shape[0], 1,1])], 1)
     
@@ -241,19 +254,20 @@ def spherify_poses(poses, bds):
     
 
 def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=False, path_zflat=False):
-    
 
+    """
+    LLFF数据集加载方法
+    """
     poses, bds, imgs = _load_data(basedir, factor=factor) # factor=8 downsamples original imgs by 8x
     print('Loaded', basedir, bds.min(), bds.max())
     
-    # Correct rotation matrix ordering and move variable dim to axis 0
+    # 坐标系更正，校正LLFF与NeRF(也即OpenGL)坐标系之间的定义差异，从DRB转换为RUB
     poses = np.concatenate([poses[:, 1:2, :], -poses[:, 0:1, :], poses[:, 2:, :]], 1)
     poses = np.moveaxis(poses, -1, 0).astype(np.float32)
     imgs = np.moveaxis(imgs, -1, 0).astype(np.float32)
     images = imgs
     bds = np.moveaxis(bds, -1, 0).astype(np.float32)
     
-    # Rescale if bd_factor is provided
     sc = 1. if bd_factor is None else 1./(bds.min() * bd_factor)
     poses[:,:3,3] *= sc
     bds *= sc
@@ -261,26 +275,29 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=Fal
     if recenter:
         poses = recenter_poses(poses)
         
+    # 两种渲染路径方法：360球型，spiral型
     if spherify:
+        # 生成以输入位姿和边界为参数的球型位姿和边界
         poses, render_poses, bds = spherify_poses(poses, bds)
 
     else:
         
+        # 以输入位姿与边界生成螺旋的相机位姿
         c2w = poses_avg(poses)
         print('recentered', c2w.shape)
         print(c2w[:3,:4])
 
-        ## Get spiral
-        # Get average pose
+        ## 获取spiral路径
+        # 获得平均位姿
         up = normalize(poses[:, :3, 1].sum(0))
 
-        # Find a reasonable "focus depth" for this dataset
+        # 寻找一个合理的深度焦点
         close_depth, inf_depth = bds.min()*.9, bds.max()*5.
         dt = .75
         mean_dz = 1./(((1.-dt)/close_depth + dt/inf_depth))
         focal = mean_dz
 
-        # Get radii for spiral path
+        # 计算spiral路径
         shrink_factor = .8
         zdelta = close_depth * .2
         tt = poses[:,:3,3] # ptstocam(poses[:3,3,:].T, c2w).T
@@ -296,7 +313,7 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=Fal
             N_rots = 1
             N_views/=2
 
-        # Generate poses for spiral path
+        # 生成spiral渲染轨迹
         render_poses = render_path_spiral(c2w_path, up, rads, focal, zdelta, zrate=.5, rots=N_rots, N=N_views)
         
         

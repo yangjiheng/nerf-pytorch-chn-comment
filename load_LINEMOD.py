@@ -35,6 +35,7 @@ def pose_spherical(theta, phi, radius):
 
 
 def load_LINEMOD_data(basedir, half_res=False, testskip=1):
+    # 加载LINEMOD数据集
     splits = ['train', 'val', 'test']
     metas = {}
     for s in splits:
@@ -44,6 +45,7 @@ def load_LINEMOD_data(basedir, half_res=False, testskip=1):
     all_imgs = []
     all_poses = []
     counts = [0]
+    # 分开加载train/val/test数据集
     for s in splits:
         meta = metas[s]
         imgs = []
@@ -70,13 +72,16 @@ def load_LINEMOD_data(basedir, half_res=False, testskip=1):
     imgs = np.concatenate(all_imgs, 0)
     poses = np.concatenate(all_poses, 0)
     
+    # 解析相机内参
     H, W = imgs[0].shape[:2]
     focal = float(meta['frames'][0]['intrinsic_matrix'][0][0])
     K = meta['frames'][0]['intrinsic_matrix']
     print(f"Focal: {focal}")
     
+    # 计算渲染位姿
     render_poses = torch.stack([pose_spherical(angle, -30.0, 4.0) for angle in np.linspace(-180,180,40+1)[:-1]], 0)
     
+    # 半分辨率处理，参考blender数据集内容
     if half_res:
         H = H//2
         W = W//2
@@ -88,6 +93,7 @@ def load_LINEMOD_data(basedir, half_res=False, testskip=1):
         imgs = imgs_half_res
         # imgs = tf.image.resize_area(imgs, [400, 400]).numpy()
 
+    # 解析近平面、远平面
     near = np.floor(min(metas['train']['near'], metas['test']['near']))
     far = np.ceil(max(metas['train']['far'], metas['test']['far']))
     return imgs, poses, render_poses, [H, W, focal], K, i_split, near, far

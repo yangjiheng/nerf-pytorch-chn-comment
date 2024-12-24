@@ -4,10 +4,12 @@ import imageio
 
 
 def load_dv_data(scene='cube', basedir='/data/deepvoxels', testskip=8):
-    
+    """
+    加载DeepVoxels数据集
+    """
 
     def parse_intrinsics(filepath, trgt_sidelength, invert_y=False):
-        # Get camera intrinsics
+        # 解析相机内参
         with open(filepath, 'r') as file:
             f, cx, cy = list(map(float, file.readline().split()))[:3]
             grid_barycenter = np.array(list(map(float, file.readline().split())))
@@ -37,7 +39,7 @@ def load_dv_data(scene='cube', basedir='/data/deepvoxels', testskip=8):
         else:
             fy = f
 
-        # Build the intrinsic matrices
+        # 构造内参矩阵
         full_intrinsic = np.array([[fx, 0., cx, 0.],
                                    [0., fy, cy, 0],
                                    [0., 0, 1, 0],
@@ -47,6 +49,7 @@ def load_dv_data(scene='cube', basedir='/data/deepvoxels', testskip=8):
 
 
     def load_pose(filename):
+        # 加载相机外参
         assert os.path.isfile(filename)
         nums = open(filename).read().split()
         return np.array([float(x) for x in nums]).reshape([4,4]).astype(np.float32)
@@ -81,18 +84,21 @@ def load_dv_data(scene='cube', basedir='/data/deepvoxels', testskip=8):
     valposes = dir2poses('{}/validation/{}/pose'.format(basedir, scene))
     valposes = valposes[::testskip]
 
+    # 加载train图像
     imgfiles = [f for f in sorted(os.listdir(os.path.join(deepvoxels_base, 'rgb'))) if f.endswith('png')]
     imgs = np.stack([imageio.imread(os.path.join(deepvoxels_base, 'rgb', f))/255. for f in imgfiles], 0).astype(np.float32)
     
-    
+    # 加载test图像
     testimgd = '{}/test/{}/rgb'.format(basedir, scene)
     imgfiles = [f for f in sorted(os.listdir(testimgd)) if f.endswith('png')]
     testimgs = np.stack([imageio.imread(os.path.join(testimgd, f))/255. for f in imgfiles[::testskip]], 0).astype(np.float32)
     
+    # 加载validation图像
     valimgd = '{}/validation/{}/rgb'.format(basedir, scene)
     imgfiles = [f for f in sorted(os.listdir(valimgd)) if f.endswith('png')]
     valimgs = np.stack([imageio.imread(os.path.join(valimgd, f))/255. for f in imgfiles[::testskip]], 0).astype(np.float32)
     
+    # 合并加载图像信息、位姿、数量标记等
     all_imgs = [imgs, valimgs, testimgs]
     counts = [0] + [x.shape[0] for x in all_imgs]
     counts = np.cumsum(counts)
