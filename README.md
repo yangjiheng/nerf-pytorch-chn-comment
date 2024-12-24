@@ -1,3 +1,17 @@
+# NeRF-pytorch-chn-comment
+
+This is a commented version of nerf-pytorch for reference to all interested readers.
+
+If you experience any issue during reading, don't hesistate to drop an email, or pose an issue, or report in the community, so we can discuss and refine this.
+
+Thanks!
+
+For all collected NeRF work: https://github.com/yangjiheng/nerf_and_beyond_docs
+
+For all collected 3DGS work: https://github.com/yangjiheng/3DGS_and_Beyond_Docs
+
+For those of you who have already purchased the book, all references can be downloaded HERE. If you experience any issue reading the book or have any suggestions to improve it, please contact me through my email address: jiheng.yang@gmail.com, or directly concact me on WeChat: jiheng_yang. I'm looking forward to talk to anyone reaching out to me, thanks in advance.
+
 # NeRF-pytorch
 
 
